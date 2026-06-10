@@ -1,14 +1,19 @@
 {
-  "name": "cypress-chatbot",
-  "version": "1.0.0",
-  "description": "Automatización del chatbot MAZSalud con Cypress",
+  "name": "playwright-orangehrm",
+  "version": "2.0.0",
+  "description": "Automatización de OrangeHRM y del chatbot MAZSalud con Playwright + TypeScript (Page Object Model)",
   "scripts": {
-    "cypress:open": "cypress open",
-    "cypress:run": "cypress run",
-    "test": "cypress run --browser chrome --headless --spec 'cypress/e2e/pruebaQA.cy.js' --reporter junit --reporter-options mochaFile=reports/junit-[hash].xml,toConsole=true"
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:orangehrm": "playwright test orangehrm.spec.ts",
+    "test:chatbot": "playwright test chatbot.spec.ts",
+    "report": "playwright show-report",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "cypress": "^13.17.0",
-    "cypress-file-upload": "^5.0.8"
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
   }
 }

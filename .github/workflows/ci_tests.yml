@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  tests-js:
+  tests-playwright:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -19,12 +19,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'   # <- ahora sí funcionará porque ya tendrás package-lock.json
+          cache: 'npm'
 
       - name: Install deps
         run: npm ci || npm install
 
-      - name: Run Cypress (JUnit)
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests (JUnit + HTML)
         run: npm test
         env:
           TZ: America/Mexico_City
@@ -37,21 +40,21 @@ jobs:
           path: reports/*.xml
           if-no-files-found: warn
 
-      - name: Upload Cypress videos & screenshots
+      - name: Upload Playwright report & traces
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cypress-artifacts
+          name: playwright-artifacts
           path: |
-            cypress/videos/**
-            cypress/screenshots/**
+            playwright-report/**
+            test-results/**
           if-no-files-found: ignore
 
       - name: Publish JUnit to PR Checks
         if: always()
         uses: dorny/test-reporter@v1
         with:
-          name: JS Tests
+          name: Playwright Tests
           path: "reports/*.xml"
           reporter: java-junit
           fail-on-error: false

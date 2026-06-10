@@ -1,118 +1,173 @@
-# PruebaQA_Artificial_Nerds
-Guía rápida: Clonar el proyecto y ejecutar el pipeline (Cypress + GitHub Actions)
-================================================================================
+# PruebaQA_Artificial_Nerds — Playwright + TypeScript (Page Object Model)
 
-1) Requisitos
--------------
-- Node.js 18+ (recomendado 20)
+End-to-end automation suite for **OrangeHRM** (PIM / login / personal details / attachments /
+logout) and the **MAZSalud chatbot** widget, migrated from **Cypress + JavaScript** to
+**Playwright + TypeScript**, organized as a **Page Object Model (POM)**.
+
+## Why this project moved from Cypress to Playwright
+
+The original suite worked, but two recurring pain points drove the migration:
+
+1. **Cross-origin limitations.** The chatbot widget lives inside a cross-origin `<iframe>`.
+   Cypress cannot drive or even reliably inspect cross-origin frames, which is why the original
+   `ChatbotQA.cy.js` could only assert that the iframe *existed* and had to fall back to a raw
+   `cy.request()` to exercise the chat through its HTTP API. Playwright has first-class support
+   for frames (`frameLocator`) and a real multi-tab/multi-origin browser automation model, which
+   removes that ceiling for future test growth.
+2. **Browser coverage and parallelism.** Cypress runs one browser/tab per spec and its
+   cross-browser story (Firefox/WebKit) is comparatively limited. Playwright ships a single API
+   that drives Chromium, Firefox and WebKit, runs specs in parallel workers out of the box, and
+   has built-in tracing/video/screenshot capture on failure — all of which simplified the CI setup
+   (see `.github/workflows/ci_tests.yml`).
+
+Additional reasons that tipped the scale:
+
+| Topic | Cypress | Playwright |
+|---|---|---|
+| Language | JavaScript (typings via `cypress` globals) | **TypeScript-first**, full editor autocompletion on the `Page`/`Locator` API |
+| Async model | Custom command-queue/chaining (`cy.get().should()...`) that hides Promises | Native `async`/`await`, plain Promises — easier to compose into Page Objects and helper classes |
+| Auto-waiting | Built-in, but scoped to its command queue | Built-in **actionability checks** (`visible`, `stable`, `enabled`, receives events) baked into every action and into `expect(locator)` assertions |
+| API testing | `cy.request()` (shares the browser's network stack) | Dedicated `request` fixture (`APIRequestContext`) that is independent from the browser — used here for the chatbot "send message" scenario |
+| Reporting | JUnit reporter via plugin/CLI flags | Built-in HTML, JUnit, list, dot, and JSON reporters configured declaratively in `playwright.config.ts` |
+| Test isolation | Shared browser/tab across a spec; manual `cy.clearCookies()/clearLocalStorage()` | Each test gets a brand-new, isolated `BrowserContext` automatically |
+| File uploads / network mocking | Required the `cypress-file-upload` plugin | Native `locator.setInputFiles()` and `page.route()` |
+
+In short: Playwright's native TypeScript support, frame/iframe handling, parallel execution and
+batteries-included tooling (trace viewer, HTML reports, codegen) made it a better long-term fit
+for this suite, especially given the chatbot scenario's cross-origin constraints.
+
+## Project structure
+
+```
+playwright.config.ts        # Browsers, projects, reporters, timeouts, launch args
+tsconfig.json               # Strict TypeScript configuration
+pages/                      # Page Object Model classes
+  LoginPage.ts              # OrangeHRM login screen
+  DashboardPage.ts          # OrangeHRM dashboard landing screen
+  PersonalDetailsPage.ts    # PIM "Personal Details" form, Custom Fields, Attachments, logout
+  ChatbotPage.ts            # MAZSalud chatbot widget + HTTP API helper
+tests/                      # Test specs (one `describe` per original Cypress spec)
+  orangehrm.spec.ts         # Former cypress/e2e/pruebaQA.cy.js
+  chatbot.spec.ts           # Former cypress/e2e/ChatbotQA.cy.js
+fixtures/                   # Static files used by tests (former cypress/fixtures)
+  flordeprueba.jpeg
+  nuevaImagen.png
+.github/workflows/
+  ci_tests.yml              # GitHub Actions pipeline (Playwright + JUnit)
+```
+
+## Migration decisions
+
+- **Page Object Model.** All locators and screen-specific actions were extracted from the spec
+  files into dedicated classes under `pages/`. Tests now read as a sequence of business actions
+  (`loginPage.login(...)`, `personalDetailsPage.fillName(...)`, `personalDetailsPage.save()`)
+  instead of chains of raw selectors — the same readability goal the original spec's inline
+  comments were trying to achieve, but enforced structurally and reusable across specs.
+- **Same test cases & assertions.** Every `it(...)` from both original specs has a 1:1
+  counterpart `test(...)`: *Log in incorrecto*, *Log in correcto*, *Acceder a My Info*,
+  *Agregar y guardar Personal Details*, *Custom Fields*, *Gestión de imágenes (Attachments)*,
+  *Cerrar sesión* (OrangeHRM) and *Acceder a la URL*, *Encontrar el botón del chatbot*,
+  *Abrir el chatbot visualmente*, *Escribir "Hola" (simulado por cross-origin)*,
+  *Enviar "Hola" vía API y validar respuesta* (Chatbot).
+- **Cypress command → Playwright equivalent mapping**, applied throughout:
+  - `cy.visit(url)` → `page.goto(url)`
+  - `cy.get(selector).should('be.visible')` → `expect(locator).toBeVisible()`
+  - `cy.contains(text)` / `.parents().find()` → `page.getByText()`, `locator.filter({ hasText })`,
+    XPath `ancestor::` locators
+  - `.type(text)` / `.clear()` → `locator.fill(text)` / `locator.clear()`
+  - `.check({ force: true })` → `locator.check({ force: true })`
+  - `.selectFile(path)` (via `cypress-file-upload`) → `locator.setInputFiles(path)` (native)
+  - `cy.request()` → the `request` fixture (`APIRequestContext`)
+  - `cy.clearCookies()/clearLocalStorage()` → relied on Playwright's per-test isolated
+    `BrowserContext`, with an explicit `context.clearCookies()` kept in `beforeEach` for parity
+  - `Cypress.on('uncaught:exception', ...)` → not needed; Playwright does not fail tests on
+    page-level uncaught exceptions by default
+- **Custom Chrome launch flags preserved.** The `--disable-blink-features=AutomationControlled`
+  flag and the Spanish (`es-ES`) locale/user agent from `cypress.config.js`'s
+  `before:browser:launch` hook were ported into `playwright.config.ts` (`launchOptions.args`,
+  `use.locale`, `use.userAgent`).
+- **JUnit reporting kept for CI.** `playwright.config.ts` configures the built-in `junit`
+  reporter to write to `reports/junit-results.xml` (same path/convention the GitHub Actions
+  workflow already expected), plus the `html` reporter for local debugging via traces,
+  screenshots and videos on failure.
+- **TypeScript throughout.** All `.cy.js` specs and support files were rewritten as `.ts` with
+  explicit interfaces (e.g. `NameDetails`, `ChatbotApiBody`) and typed Playwright fixtures
+  (`Page`, `Locator`, `APIRequestContext`), checked via `npm run typecheck` (`tsc --noEmit`).
+
+## Requirements
+
+- Node.js 18+ (recommended 20)
 - Git
-- Cuenta de GitHub con acceso al repositorio
 
-2) Clonar el repositorio
-------------------------
-# Reemplaza <USUARIO>/<REPO> por el tuyo
-git clone https://github.com/<USUARIO>/<REPO>.git
-cd <REPO>
+## Install
 
-3) Instalar dependencias
-------------------------
+```bash
 npm ci || npm install
+npx playwright install --with-deps chromium
+```
 
-4) Ejecutar pruebas localmente
----------------------------------------------------------------------
-# Corre todas las pruebas en modo headless
+## Run the tests
+
+```bash
+# Run everything (both projects: orangehrm + chatbot)
 npm test
 
-# Para ejecutar solo un spec:
-# npx cypress run --browser chrome --headless --spec "cypress/e2e/pruebaQA.cy.js"
+# Run with a visible browser
+npm run test:headed
 
-# Para abrir la UI de Cypress (modo interactivo):
-# npx cypress open
+# Open Playwright's interactive UI mode
+npm run test:ui
 
-5) ¿Cómo se ejecuta el pipeline en GitHub Actions?
---------------------------------------------------
-El workflow vive en .github/workflows/ci-tests.yml y se ejecuta automáticamente cuando:
-- Haces push a la rama main
-- Abres un Pull Request hacia main
-- (Opcional) Lo lanzas manualmente desde la pestaña Actions (si el workflow tiene 'workflow_dispatch')
+# Run a single suite
+npm run test:orangehrm
+npm run test:chatbot
 
-6) Disparar el pipeline con un push
------------------------------------
-# Agrega tus cambios
-git add -A
-git commit -m "Mis cambios"
+# Open the last HTML report
+npm run report
 
-# Sube a la rama main o a tu rama personalizada
-git push origin "rama"
+# Type-check the project without running tests
+npm run typecheck
+```
 
-7) Lanzarlo manualmente desde GitHub
-------------------------------------
-- Ve a tu repositorio en GitHub
-- Abre la pestaña "Actions"
-- Selecciona "CI • Tests"
-- Presiona el botón "Run workflow" y elige la rama
+## CI pipeline (GitHub Actions)
 
-8) ¿Dónde veo los resultados?
------------------------------
-- En la ejecución (Actions → el run más reciente) verás los logs paso a paso
-- En un Pull Request, entra a la pestaña "Checks" para ver el resumen
-- En "Artifacts" puedes descargar:
-  - junit-results (reportes JUnit XML)
-  - cypress-artifacts (videos y screenshots si falló algo)
+The workflow lives in `.github/workflows/ci_tests.yml` and runs automatically when:
 
-9) Estructura mínima esperada
------------------------------
-cypress.config.js
-cypress/
-  e2e/
-    ChatbotQA.cy.js
-    pruebaQA.cy.js
-  fixtures/
-    flordeprueba.jpeg   
-  support/
-    e2e.js              
-    commands.js
-.github/workflows/
-  ci-tests.yml
-package.json  
+- You push to the `main` branch
+- You open a Pull Request targeting `main`
+- You trigger it manually from the **Actions** tab (`workflow_dispatch`)
 
-10) Comandos útiles de Git
---------------------------
-# Ver estado
-git status
+It installs dependencies, installs the Chromium browser binaries, runs `npm test`
+(Playwright with the `junit` + `html` reporters), and uploads:
 
-# Traer cambios del remoto y re-aplicar los tuyos encima (rebase)
-git pull --rebase origin main
+- `junit-results` — JUnit XML report (consumed by `dorny/test-reporter` for PR checks)
+- `playwright-artifacts` — HTML report, traces, screenshots and videos for failed runs
 
-# Resolver conflictos: edita archivos marcados, luego
-# git add <archivo>
-# git rebase --continue
+## Notes on the OrangeHRM suite
 
-11) Problemas comunes y soluciones rápidas
-------------------------------------------
-- Error: "npm error Missing script: \"test\""
-  -> Agrega el script de test:
-     npm pkg set scripts.test="cypress run --browser chrome --headless --reporter junit --reporter-options mochaFile=reports/junit-[hash].xml,toConsole=true"
+`opensource-demo.orangehrmlive.com` is a public, shared demo instance — every visitor reuses the
+same `Admin` account and the same employee records, so its data drifts over time as other people
+run their own scripts and manual tests against it. One assertion inherited from the original spec
+is sensitive to this:
 
-- Error: "cy.selectFile(...): file does not exist"
-  -> Asegúrate de subir el fixture a cypress/fixtures/ y que el nombre/ruta coincida exactamente.
+- **"Cerrar sesion"** asserts that after renaming employee #7 to "John Michael Smith", the
+  top-bar user dropdown shows `John Smith` (`cy.contains('p.oxd-userdropdown-name', 'John Smith', …)`
+  in the original Cypress test). That only holds when employee #7 *is* the employee record linked
+  to the logged-in `Admin` account — i.e., editing "your own" Personal Details changes your own
+  displayed name. On the current shared instance, `Admin`'s linked employee is named "Orange Test",
+  so the dropdown keeps showing that name no matter what employee #7's record says, and the
+  assertion fails. This is a pre-existing assumption baked into the original spec about the shared
+  demo's state, not a regression introduced by the migration — the assertion was kept unchanged
+  to honor "keep the same test cases and assertions", and the failure reproduces identically
+  whether driven by Cypress or Playwright.
 
-- Error 403 en cy.visit() (sitio del chatbot)
--> Es un WAF/CDN que bloquea CI. Opciones:
-     a) Usar Chrome con user-agent “normal” (configurado en cypress.config.js) y, si es necesario, modo headed.
-     b) Pedir un entorno de staging o un bypass/whitelist para el runner de CI.
-     c) Como plan B, saltar ese suite en CI con una variable (CYPRESS_SKIP_CHATBOT=1) y seguir ejecutándolo localmente.
+## Notes on the chatbot suite
 
-- Cache de npm no funciona
-  -> Asegúrate de commitear package-lock.json.
+The MAZSalud site sits behind a WAF/CDN that may block CI runners and the chat widget itself
+is rendered inside a cross-origin `<iframe>`, so:
 
-12) Subir un proyecto local a un repo nuevo (si partes de cero)
----------------------------------------------------------------
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/<USUARIO>/<REPO>.git
-git push -u origin main
-
-Listo.
+- UI assertions are limited to confirming the widget's presence/visibility
+  (`ChatbotPage.expectChatButtonVisible/expectChatContainerExists/forceShowChat`).
+- The "send a message" scenario talks to the chatbot's HTTP API directly through Playwright's
+  `request` fixture (`ChatbotPage.sendMessage`), exactly like the original spec did with
+  `cy.request()`.

@@ -1,0 +1,11 @@
+node_modules/
+
+# Playwright artifacts
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/reports/
+/dist/
+
+# Misc
+*.log
