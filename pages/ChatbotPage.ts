@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
-/** Shape of the JSON payload the MAZSalud chatbot API may answer with. */
+// This file contains a Page Object representing the MAZSalud chatbot widget and its API
 interface ChatbotApiBody {
   reply?: unknown;
   message?: unknown;
@@ -10,12 +10,7 @@ interface ChatbotApiBody {
   [key: string]: unknown;
 }
 
-/**
- * Page Object for the MAZSalud chatbot widget embedded on the public site.
- * The widget itself lives in a cross-origin iframe (the original Cypress spec
- * could only assert on its presence/visibility, not type into it), so this
- * object also exposes a small API helper for the "send message" scenario.
- */
+// Page Object representing the MAZSalud chatbot widget and its API.
 export class ChatbotPage {
   readonly page: Page;
   readonly cookieBanner: Locator;
@@ -39,47 +34,31 @@ export class ChatbotPage {
     await this.page.goto(ChatbotPage.BASE_URL);
   }
 
-  async expectOnSite(): Promise<void> {
-    await expect(this.page).toHaveURL(/programamazsalud\.com\.mx/);
-  }
-
-  /** Dismisses the cookie consent banner if it is shown (best-effort, mirrors the original spec). */
+  //Dismisses the cookie banner if it appears
   async acceptCookiesIfPresent(): Promise<void> {
     try {
       await this.cookieBanner.click({ timeout: 8_000 });
     } catch {
-      // Banner not shown (e.g. already accepted) — nothing to do.
     }
   }
 
-  async expectChatButtonVisible(): Promise<void> {
-    await expect(this.chatButtonIframe).toBeVisible({ timeout: 10_000 });
+  //Forces the chat widget to show up 
+  async forceShowChat() {
+  await expect(this.chatContainer).toHaveCount(1);
+
+  await this.chatContainer.evaluate((el) => {
+    el.classList.remove(
+      'botlers-messaging-hidden-class',
+      'fadeOutDownBMAnimation'
+    );
+
+    el.classList.add('fadeInUpBMAnimation');
+  });
+
+  await expect(this.chatIframe).toBeVisible();
   }
 
-  async expectChatContainerExists(): Promise<void> {
-    await expect(this.chatContainer).toHaveCount(1, { timeout: 20_000 });
-  }
-
-  /**
-   * Forces the (normally collapsed) chat widget to display by swapping its
-   * animation classes — the same DOM hack the original Cypress spec performed
-   * via `invoke('removeClass'/'addClass')`.
-   */
-  async forceShowChat(): Promise<void> {
-    await expect(this.chatContainer).toHaveCount(1, { timeout: 20_000 });
-    await this.chatContainer.evaluate((el) => {
-      el.classList.remove('botlers-messaging-hidden-class', 'fadeOutDownBMAnimation');
-      el.classList.add('fadeInUpBMAnimation');
-    });
-
-    await expect(this.chatIframe).toHaveCount(1, { timeout: 20_000 });
-    await expect(this.chatIframe).toBeVisible();
-  }
-
-  /**
-   * Sends a message through the chatbot's HTTP API directly (the widget's
-   * iframe is cross-origin, so the UI cannot be driven from the test).
-   */
+  //Sends a message via API 
   static async sendMessage(request: APIRequestContext, message: string): Promise<{ status: number; body: unknown }> {
     const response = await request.post(ChatbotPage.API_ENDPOINT, {
       data: {
@@ -102,24 +81,42 @@ export class ChatbotPage {
     return { status, body };
   }
 
-  /** Heuristic check that the API responded with something resembling a chatbot reply. */
+  // Checks if the chatbot actually replied with something that looks like a message
   static hasReply(body: unknown): boolean {
-    try {
-      if (!body) return false;
-      if (typeof body === 'string') return body.trim().length > 0;
+    if (!body) return false;
 
-      const b = body as ChatbotApiBody;
-      if (b.reply && String(b.reply).trim()) return true;
-      if (b.message && String(b.message).trim()) return true;
-      if (b.data?.reply && String(b.data.reply).trim()) return true;
-      if (Array.isArray(b.messages) && b.messages.some((m) => String(m?.text ?? m?.message ?? '').trim())) {
-        return true;
-      }
-      if (b.resource?.welcome_msg && String(b.resource.welcome_msg).trim()) return true;
-
-      return /hola|bienvenid|mazsalud|dr\s*tomaz/i.test(JSON.stringify(b));
-    } catch {
-      return false;
+    if (typeof body === 'string') {
+      return body.trim().length > 0;
     }
+
+    const response = body as ChatbotApiBody;
+
+    if (response.reply && String(response.reply).trim()) return true;
+
+    if (response.message && String(response.message).trim()) return true;
+
+    if (response.data?.reply && String(response.data.reply).trim()) {
+      return true;
+    }
+
+    if (
+      Array.isArray(response.messages) &&
+      response.messages.some(
+        (msg) => String(msg?.text ?? msg?.message ?? '').trim()
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      response.resource?.welcome_msg &&
+      String(response.resource.welcome_msg).trim()
+    ) {
+      return true;
+    }
+
+    return /hola|bienvenid|mazsalud|dr\s*tomaz/i.test(
+      JSON.stringify(response)
+    );
   }
 }

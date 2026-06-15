@@ -143,24 +143,6 @@ It installs dependencies, installs the Chromium browser binaries, runs `npm test
 - `junit-results` — JUnit XML report (consumed by `dorny/test-reporter` for PR checks)
 - `playwright-artifacts` — HTML report, traces, screenshots and videos for failed runs
 
-## Notes on the OrangeHRM suite
-
-`opensource-demo.orangehrmlive.com` is a public, shared demo instance — every visitor reuses the
-same `Admin` account and the same employee records, so its data drifts over time as other people
-run their own scripts and manual tests against it. One assertion inherited from the original spec
-is sensitive to this:
-
-- **"Cerrar sesion"** asserts that after renaming employee #7 to "John Michael Smith", the
-  top-bar user dropdown shows `John Smith` (`cy.contains('p.oxd-userdropdown-name', 'John Smith', …)`
-  in the original Cypress test). That only holds when employee #7 *is* the employee record linked
-  to the logged-in `Admin` account — i.e., editing "your own" Personal Details changes your own
-  displayed name. On the current shared instance, `Admin`'s linked employee is named "Orange Test",
-  so the dropdown keeps showing that name no matter what employee #7's record says, and the
-  assertion fails. This is a pre-existing assumption baked into the original spec about the shared
-  demo's state, not a regression introduced by the migration — the assertion was kept unchanged
-  to honor "keep the same test cases and assertions", and the failure reproduces identically
-  whether driven by Cypress or Playwright.
-
 ## Notes on the chatbot suite
 
 The MAZSalud site sits behind a WAF/CDN that may block CI runners and the chat widget itself

@@ -1,60 +1,37 @@
-name: CI • Tests
+name: Playwright Tests
+
 on:
-  workflow_dispatch: {}
   push:
     branches: [ main ]
   pull_request:
 
 jobs:
-  tests-playwright:
+  test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-      pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Install deps
-        run: npm ci || npm install
+      - name: Install dependencies
+        run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps
 
-      - name: Run Playwright tests (JUnit + HTML)
-        run: npm test
-        env:
-          TZ: America/Mexico_City
+      - name: Run tests
+        run: npx playwright test
 
-      - name: Upload test results (JUnit XML)
+      - name: Upload HTML report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: junit-results
-          path: reports/*.xml
-          if-no-files-found: warn
-
-      - name: Upload Playwright report & traces
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-artifacts
-          path: |
-            playwright-report/**
-            test-results/**
-          if-no-files-found: ignore
-
-      - name: Publish JUnit to PR Checks
-        if: always()
-        uses: dorny/test-reporter@v1
-        with:
-          name: Playwright Tests
-          path: "reports/*.xml"
-          reporter: java-junit
-          fail-on-error: false
+          name: playwright-report
+          path: playwright-report
+          

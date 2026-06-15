@@ -1,50 +1,59 @@
 import { expect, test } from '@playwright/test';
 import { ChatbotPage } from '../pages/ChatbotPage';
 
-test.describe('Automatización de Chatbot (Prueba técnica QA)', () => {
+test.describe('Chatbot automation', () => {
   test.beforeEach(async ({ page }) => {
     const chatbotPage = new ChatbotPage(page);
 
     await chatbotPage.goto();
-    await chatbotPage.expectOnSite();
+    await expect(page).toHaveURL(/programamazsalud\.com\.mx/);
     await chatbotPage.acceptCookiesIfPresent();
   });
 
-  test('Acceder a la URL', async ({ page }) => {
-    const chatbotPage = new ChatbotPage(page);
-    await chatbotPage.expectOnSite();
+  test('Must load the main page', async ({ page }) => {
+    await expect(page).toHaveURL(/programamazsalud\.com\.mx/);
   });
 
-  test('Encontrar el botón del chatbot', async ({ page }) => {
+  test('Must show the chatbot button', async ({ page }) => {
     const chatbotPage = new ChatbotPage(page);
-    await chatbotPage.expectChatButtonVisible();
+
+    await expect(chatbotPage.chatButtonIframe).toBeVisible();
   });
 
-  test('Abrir el chatbot visualmente', async ({ page }) => {
+  test('Must open the chatbot visually', async ({ page }) => {
     const chatbotPage = new ChatbotPage(page);
 
-    await chatbotPage.expectChatContainerExists();
+    await expect(chatbotPage.chatContainer).toBeAttached();
     await chatbotPage.forceShowChat();
   });
 
-  test('Escribir "Hola" (simulado por cross-origin)', async ({ page }, testInfo) => {
-    const chatbotPage = new ChatbotPage(page);
+  test(
+    'Should be able to send a message via API',
+      async ({ request }, testInfo) => {
+      const { status, body } =
+        await ChatbotPage.sendMessage(request, 'Hola');
 
-    await chatbotPage.forceShowChat();
-    testInfo.annotations.push({
-      type: 'note',
-      description: 'Simulación: no se puede tipear dentro del iframe por cross-origin.',
-    });
-  });
+      testInfo.annotations.push({
+        type: 'note',
+        description: `Status: ${status}`,
+      });
 
-  test('Enviar "Hola" vía API y validar respuesta', async ({ request }, testInfo) => {
+      testInfo.annotations.push({
+        type: 'note',
+        description: JSON.stringify(body),
+      });
+    }
+  );
+
+  test('Should be able to send a message via API and validate the response', async ({ request }, testInfo) => {
     const { status, body } = await ChatbotPage.sendMessage(request, 'Hola');
 
     testInfo.annotations.push({ type: 'note', description: `Status: ${status}` });
     testInfo.annotations.push({ type: 'note', description: `Body: ${JSON.stringify(body)}` });
 
     if (status === 200) {
-      expect(ChatbotPage.hasReply(body)).toBe(true);
+      expect(body).toBeTruthy();
+      expect(ChatbotPage.hasReply(body)).toBeTruthy();
     } else {
       testInfo.annotations.push({ type: 'note', description: 'El endpoint requiere autenticación (401/403)' });
     }
