@@ -101,7 +101,6 @@ export class PersonalDetailsPage {
   async expectLoaded() {
     await expect(this.firstNameInput).toBeVisible({ timeout: 20000 });
     await expect(this.lastNameInput).toBeVisible({ timeout: 20000 });
-
     await expect(this.firstNameInput).not.toHaveValue('', { timeout: 20000 });
   }
 

@@ -57,7 +57,7 @@ test.describe('Chatbot automation', () => {
       expect(body).toBeTruthy();
       expect(ChatbotPage.hasReply(body)).toBeTruthy();
     } else {
-      testInfo.annotations.push({ type: 'note', description: 'El endpoint requiere autenticación (401/403)' });
+      testInfo.annotations.push({ type: 'note', description: 'Endpoint requires authentication (401/403)' });
     }
   });
 });

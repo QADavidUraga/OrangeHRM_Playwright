@@ -1,7 +1,7 @@
 {
   "name": "playwright-orangehrm",
   "version": "2.0.0",
-  "description": "Automatización de OrangeHRM y del chatbot MAZSalud con Playwright + TypeScript (Page Object Model)",
+  "description": "OrangeHRM end-to-end tests using Playwright and TypeScript. Chatbot tests included.",
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
