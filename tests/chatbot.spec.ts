@@ -15,12 +15,14 @@ test.describe('Chatbot automation', () => {
   });
 
   test('Must show the chatbot button', async ({ page }) => {
+    test.skip(!!process.env.CI, 'Botlers widget only renders for Mexican IPs; CI runners use foreign datacenter IPs');
     const chatbotPage = new ChatbotPage(page);
 
     await expect(chatbotPage.chatButtonIframe).toBeVisible();
   });
 
   test('Must open the chatbot visually', async ({ page }) => {
+    test.skip(!!process.env.CI, 'Botlers widget only renders for Mexican IPs; CI runners use foreign datacenter IPs');
     const chatbotPage = new ChatbotPage(page);
 
     await expect(chatbotPage.chatContainer).toBeAttached();
